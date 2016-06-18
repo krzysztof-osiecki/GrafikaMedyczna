@@ -1,5 +1,6 @@
 package util;
 
+import data.ThresholdType;
 import org.opencv.core.*;
 import org.opencv.highgui.Highgui;
 import org.opencv.imgproc.Imgproc;
@@ -7,11 +8,8 @@ import org.opencv.imgproc.Imgproc;
 import java.awt.*;
 import java.awt.image.*;
 import java.io.File;
-import java.util.Arrays;
+import java.util.*;
 import java.util.List;
-import java.util.Random;
-
-import static org.opencv.imgproc.Imgproc.THRESH_BINARY_INV;
 
 public class OpenCvUtil {
 
@@ -96,13 +94,42 @@ public class OpenCvUtil {
 		return mat;
 	}
 
+	public static Mat threshold(Mat src, double thresh, double max, ThresholdType type) {
+		byte[] dataArray = new byte[src.cols() * src.rows() * src.channels()];
+		int[] resultArray = new int[src.cols() * src.rows() * src.channels()];
+		src.get(0, 0, dataArray);
+		int[] intData = toIntArray(dataArray);
+		for (int i = 0; i < dataArray.length; i++) {
+			switch (type) {
+				case BINARY:
+					resultArray[i] = (byte) (intData[i] > thresh ? max : 0);
+					break;
+				case INV_BINARY:
+					resultArray[i] = (byte) (intData[i] > thresh ? 0 : max);
+					break;
+				case THRESH_TRUNC:
+					resultArray[i] = intData[i] > thresh ? (byte) thresh : intData[i];
+					break;
+				case THRESH_TOZERO:
+					resultArray[i] = intData[i] > thresh ? intData[i] : 0;
+					break;
+				case THRESH_TOZERO_INV:
+					resultArray[i] = intData[i] > thresh ? 0 : intData[i];
+					break;
+			}
+		}
+		Mat resultMat = new Mat(src.rows(), src.cols(), src.type());
+		resultMat.put(0, 0, toByteArray(resultArray));
+		return resultMat;
+	}
+
 	public static Mat calculateThreshold(Mat imread, int levels, int max) {
 		double initialTreshold = max;
 		byte[] v = new byte[imread.cols() * imread.rows() * 3];
 		Mat mat = new Mat(imread.rows(), imread.cols(), CvType.CV_8UC3, new Scalar(0));
 		for (int i = 0; i < levels; i++) {
 			Mat clone = imread.clone();
-			Imgproc.threshold(clone, clone, initialTreshold, max, THRESH_BINARY_INV);
+			clone = threshold(clone, initialTreshold, max - 1, ThresholdType.INV_BINARY);
 			Imgproc.cvtColor(clone, clone, Imgproc.COLOR_GRAY2BGR);
 			int k = 0;
 			for (int y = 0; y < clone.rows(); y++) {
@@ -331,29 +358,96 @@ public class OpenCvUtil {
 		for (int i = 0; i < data.length; i++) {
 			ints[i] = ((int) data[i]) == 0 ? 1 : 0;
 		}
-		int[][] data2s = normalMake2D(ints, width, height);
+		int[][] data2s = normalMake2D(ints, height, width);
 		for (int y = 0; y < height; y++) {
 			for (int x = 0; x < width; x++) {
 				if (data2s[y][x] != 0) {
-					int top = -1;
-					int left = -1;
+					int top = Integer.MAX_VALUE;
+					int left = Integer.MAX_VALUE;
 					if (x - 1 >= 0) {
 						left = data2s[y][x - 1];
 					}
 					if (y - 1 >= 0) {
 						top = data2s[y - 1][x];
 					}
-					data2s[y][x] = Math.max(left, top);
-					if (data2s[y][x] == 0 || data2s[y][x] == -1) {
+					if ((top == 0 && left == 0) || (top == 0 && left == Integer.MAX_VALUE) ||
+							(top == Integer.MAX_VALUE && left == 0) || (top == Integer.MAX_VALUE && left == Integer.MAX_VALUE)) {
+						//sasiedzi nie pokolorowani albo nie istniejacy
 						data2s[y][x] = highestRegion;
-					}
-					if (data2s[y][x] == highestRegion) {
 						highestRegion++;
+					} else {
+						if (left < top) {
+							if (left != 0) {
+								data2s[y][x] = left;
+								replace(data2s, top, left, x, y);
+								//zamien wszystkie topy na lefty
+							} else {
+								data2s[y][x] = top;
+								//laczymy sie tylko jednym pikselem na gorze
+							}
+						} else if (left > top) {
+							if (top != 0) {
+								data2s[y][x] = top;
+								replace(data2s, left, top, x, y);
+							} else {
+								data2s[y][x] = left;
+								//zamien wszystkie lefty na topy
+							}
+						} else {
+							//left == top
+							data2s[y][x] = left;
+						}
 					}
 				}
 			}
 		}
+		List<Color> colors = new ArrayList<>();
+		for (int i = 0; i < highestRegion; i++) {
+			colors.add(new Color(random.nextInt(255), random.nextInt(255), random.nextInt(255)));
+		}
+		Mat mat = new Mat(imread.rows(), imread.cols(), CvType.CV_8SC3);
+		byte[] bytes = new byte[imread.rows() * imread.cols() * 3];
+		int index = 0;
+		for (int[] data2 : data2s) {
+			for (int aData2 : data2) {
+				if (aData2 != 0) {
+					Color color = colors.get(aData2);
+					bytes[index] = (byte) (color.getRed());
+					bytes[index + 1] = (byte) color.getGreen();
+					bytes[index + 2] = (byte) color.getBlue();
+				}else {
+					bytes[index] = (byte) 255;
+					bytes[index + 1] = (byte) 255;
+					bytes[index + 2] = (byte) 255;
+				}
+				index += 3;
+			}
+		}
+		mat.put(0, 0, bytes);
+		return byteMat2RgbBufferedImage(mat);
+	}
 
-		return null;
+	public static void replace(int[][] array, int from, int to, int upToX, int upToY) {
+		for (int i = 0; i < array.length; i++) {
+			for (int j = 0; j < array[i].length; j++) {
+				array[i][j] = array[i][j] == from ? to : array[i][j];
+			}
+		}
+	}
+
+	public static int[] toIntArray(byte[] array) {
+		int[] ints = new int[array.length];
+		for (int i = 0; i < array.length; i++) {
+			ints[i] = array[i] & 0xff;
+		}
+		return ints;
+	}
+
+	public static byte[] toByteArray(int[] array) {
+		byte[] bytes = new byte[array.length];
+		for (int i = 0; i < array.length; i++) {
+			bytes[i] = (byte) array[i];
+		}
+		return bytes;
 	}
 }

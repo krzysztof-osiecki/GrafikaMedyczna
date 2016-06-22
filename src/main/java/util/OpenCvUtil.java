@@ -51,9 +51,11 @@ public class OpenCvUtil {
 		int bufferSize = m.channels() * m.cols() * m.rows();
 		float[] b = new float[bufferSize];
 		m.get(0, 0, b);
-		BufferedImage image = new BufferedImage(m.cols(), m.rows(), BufferedImage.TYPE_4BYTE_ABGR);
-		final float[] targetPixels = ((DataBufferFloat) image.getRaster().getDataBuffer()).getData();
-		System.arraycopy(b, 0, targetPixels, 0, b.length);
+		BufferedImage image = new BufferedImage(m.cols(), m.rows(), BufferedImage.TYPE_INT_ARGB);
+		final int[] targetPixels = ((DataBufferInt) image.getRaster().getDataBuffer()).getData();
+		for(int i = 0; i < targetPixels.length; i++) {
+			targetPixels[i] = (int) b[i];
+		}
 		return image;
 	}
 
@@ -99,6 +101,10 @@ public class OpenCvUtil {
 		int[] resultArray = new int[src.cols() * src.rows() * src.channels()];
 		src.get(0, 0, dataArray);
 		int[] intData = toIntArray(dataArray);
+		if (type == ThresholdType.OTSU) {
+			thresh = calculateOtsu(intData);
+			type = ThresholdType.BINARY;
+		}
 		for (int i = 0; i < dataArray.length; i++) {
 			switch (type) {
 				case BINARY:
@@ -123,24 +129,59 @@ public class OpenCvUtil {
 		return resultMat;
 	}
 
-	public static Mat calculateThreshold(Mat imread, int levels, int max) {
+	private static double calculateOtsu(int[] intData) {
+		int[] histogram = new int[256];
+		double maksWariancja = 0.0;
+		int result = 0;
+		for (int i = 0; i < intData.length; i++) {
+			histogram[intData[i]]++;
+		}
+		for (int t = 0; t < 256; t++) {
+			int pObiektu = 0;
+			double sredniaObiektu = 0.0;
+			int pTla = 0;
+			double sredniaTla = 0.0;
+			for (int k = 0; k <= t; k++) {
+				pObiektu += histogram[k];
+			}
+			for (int k = t + 1; k < 256; k++) {
+				pTla += histogram[k];
+			}
+			for (int k = 0; k <= t; k++) {
+				sredniaObiektu += (k * histogram[k]) / (double) pObiektu;
+			}
+			for (int k = t + 1; k < 256; k++) {
+				sredniaTla += (k * histogram[k]) / (double) pTla;
+			}
+			double wewnatrzKlasowa = (pObiektu * pTla) * Math.pow(sredniaObiektu - sredniaTla, 2);
+			if (wewnatrzKlasowa > maksWariancja) {
+				maksWariancja = wewnatrzKlasowa;
+				result = t;
+			}
+		}
+		return result;
+	}
+
+	public static Mat calculateThreshold(Mat imread, int levels, int max, ThresholdType type, boolean color) {
 		double initialTreshold = max;
 		byte[] v = new byte[imread.cols() * imread.rows() * 3];
 		Mat mat = new Mat(imread.rows(), imread.cols(), CvType.CV_8UC3, new Scalar(0));
 		for (int i = 0; i < levels; i++) {
 			Mat clone = imread.clone();
-			clone = threshold(clone, initialTreshold, max - 1, ThresholdType.INV_BINARY);
-			Imgproc.cvtColor(clone, clone, Imgproc.COLOR_GRAY2BGR);
-			int k = 0;
-			for (int y = 0; y < clone.rows(); y++) {
-				for (int x = 0; x < clone.cols(); x++) {
-					double[] doubles = clone.get(y, x);
-					if (!allZeros(doubles)) {
-						v[k] = (byte) colors.get(i).getBlue();
-						v[k + 1] = (byte) colors.get(i).getGreen();
-						v[k + 2] = (byte) colors.get(i).getRed();
+			clone = threshold(clone, initialTreshold, max - 1, type);
+			if (color) {
+				Imgproc.cvtColor(clone, clone, Imgproc.COLOR_GRAY2BGR);
+				int k = 0;
+				for (int y = 0; y < clone.rows(); y++) {
+					for (int x = 0; x < clone.cols(); x++) {
+						double[] doubles = clone.get(y, x);
+						if (!allZeros(doubles)) {
+							v[k] = (byte) colors.get(i).getBlue();
+							v[k + 1] = (byte) colors.get(i).getGreen();
+							v[k + 2] = (byte) colors.get(i).getRed();
+						}
+						k += 3;
 					}
-					k += 3;
 				}
 			}
 			initialTreshold -= max / (double) levels;
@@ -415,7 +456,7 @@ public class OpenCvUtil {
 					bytes[index] = (byte) (color.getRed());
 					bytes[index + 1] = (byte) color.getGreen();
 					bytes[index + 2] = (byte) color.getBlue();
-				}else {
+				} else {
 					bytes[index] = (byte) 255;
 					bytes[index + 1] = (byte) 255;
 					bytes[index + 2] = (byte) 255;

@@ -3,9 +3,7 @@ package main;
 import data.ThresholdType;
 import net.miginfocom.swing.MigLayout;
 import org.apache.commons.io.IOUtils;
-import org.opencv.core.Core;
-import org.opencv.core.CvType;
-import org.opencv.core.Mat;
+import org.opencv.core.*;
 import org.opencv.highgui.Highgui;
 import org.opencv.highgui.VideoCapture;
 import org.opencv.imgproc.Imgproc;
@@ -34,26 +32,76 @@ public class GrafikaMedyczna extends JFrame {
 		new GrafikaMedyczna();
 	}
 
-	private void createMenu() {
-		JMenuBar menuBar = new JMenuBar();
-		setJMenuBar(menuBar);
-		//submenu file
-		JMenu menu = new JMenu("File");
-		menuBar.add(menu);
-		//itemy otwierania pliku
-		menuItem(menu, "Open regular image", openImageFileListener());
-		menuItem(menu, "Open for xray", openXrayFileListener());
-		menuItem(menu, "Open for xray segmentation", openSegmentationFileListener());
-		menuItem(menu, "Open for contrast", openContrastFileListener());
-		menuItem(menu, "Open for Otsu", openOtsuFileListener());
-		menuItem(menu, "Open watershed video", openWatershedListener());
-		menuItem(menu, "Find edges", openCannyEdgesFileListener());
-		menuItem(menu, "Find Hough Lines", openHoughLinesFileListener());
-		menuItem(menu, "Skeletonization", openSkeletonizationFileListener());
-		menuItem(menu, "Index regions", openRegionIndexingFileListener());
-		menu.addSeparator();
-		//item wyjscia z aplikacji
-		menuItem(menu, "Exit", ae -> System.exit(0));
+	private ActionListener openCannyEdgesFileListener() {
+		return ae -> {
+			try {
+				JFileChooser fc = new JFileChooser();
+				int returnVal = fc.showOpenDialog(null);
+				if (returnVal == JFileChooser.APPROVE_OPTION) {
+					file = fc.getSelectedFile();
+					String sigma = (String) JOptionPane.showInputDialog(this, "Choose sigma", "",
+							JOptionPane.PLAIN_MESSAGE, null, null, "");
+					String low = (String) JOptionPane.showInputDialog(this, "Choose low hysteresis level", "",
+							JOptionPane.PLAIN_MESSAGE, null, null, "");
+					String high = (String) JOptionPane.showInputDialog(this, "Choose high hysteresis level", "",
+							JOptionPane.PLAIN_MESSAGE, null, null, "");
+					BufferedImage read = ImageIO.read(file);
+					Mat mat = OpenCvUtil.bufferedImageToMat(read);
+					Imgproc.GaussianBlur(mat, mat, new Size(), Double.valueOf(sigma));
+					Imgproc.Canny(mat, mat, Double.valueOf(low), Double.valueOf(high));
+					BufferedImage bufferedImage = OpenCvUtil.performCannyDetection(read, Double.valueOf(sigma), Integer.valueOf(low),
+							Integer.valueOf(high));
+					BufferedImage bufferedImage1 = OpenCvUtil.byteMat2BufferedImage(mat);
+
+					imageLabel.setIcon(new ImageIcon(bufferedImage));
+				}
+				repaint();
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
+		};
+	}
+
+	private ActionListener openHoughLinesFileListener() {
+		return ae -> {
+			try {
+				JFileChooser fc = new JFileChooser();
+				int returnVal = fc.showOpenDialog(null);
+				if (returnVal == JFileChooser.APPROVE_OPTION) {
+					file = fc.getSelectedFile();
+
+					String sMaks = (String) JOptionPane.showInputDialog(this, "Choose mask size", "",
+							JOptionPane.PLAIN_MESSAGE, null, null, "");
+					String sLow = (String) JOptionPane.showInputDialog(this, "Choose low treshold", "",
+							JOptionPane.PLAIN_MESSAGE, null, null, "");
+					String sHigh = (String) JOptionPane.showInputDialog(this, "Choose high threshold", "",
+							JOptionPane.PLAIN_MESSAGE, null, null, "");
+
+					// load the file using Java's imageIO library
+					BufferedImage image = ImageIO.read(file);
+					Mat mat = OpenCvUtil.bufferedImageToMat(image);
+					Imgproc.Canny(mat, mat, Double.valueOf(sLow), Double.valueOf(sHigh));
+					image = OpenCvUtil.byteMat2BufferedImage(mat);
+					// create a hough transform object with the right dimensions
+					HoughTransform h = new HoughTransform(image.getWidth(), image.getHeight());
+
+					// add the points from the image (or call the addPoint method separately if your points are not in an image
+					h.addPoints(image);
+
+					// get the lines out
+					Vector<HoughLine> lines = h.getLines(30);
+
+					// draw the lines back onto the image
+					for (int j = 0; j < lines.size(); j++) {
+						HoughLine line = lines.elementAt(j);
+						line.draw(image, Color.RED.getRGB());
+					}
+					imageLabel.setIcon(new ImageIcon(image));
+				}
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+		};
 	}
 
 	private ActionListener openWatershedListener() {
@@ -72,7 +120,7 @@ public class GrafikaMedyczna extends JFrame {
 					new Thread(() -> {
 						while (videoCapture.read(imread)) {
 							Mat modifiableImread = imread;
-							modifiableImread = OpenCvUtil.threshold(modifiableImread, 128, 255, ThresholdType.BINARY);
+							modifiableImread = OpenCvUtil.threshold(modifiableImread, 128, 255, ThresholdType.BINARY, ThresholdType.BINARY);
 							Imgproc.cvtColor(modifiableImread, modifiableImread, Imgproc.COLOR_RGB2GRAY);
 							Mat distances = new Mat(modifiableImread.rows(), modifiableImread.cols(), CvType.CV_32FC1);
 							Imgproc.distanceTransform(modifiableImread, distances, Imgproc.CV_DIST_C, 3);
@@ -93,7 +141,7 @@ public class GrafikaMedyczna extends JFrame {
 		};
 	}
 
-	private ActionListener openOtsuFileListener() {
+	private ActionListener open2dOtsuFileListener() {
 		return ae -> {
 			try {
 				JFileChooser fc = new JFileChooser();
@@ -102,7 +150,7 @@ public class GrafikaMedyczna extends JFrame {
 					file = fc.getSelectedFile();
 					Mat imread = Highgui.imread(file.getAbsolutePath());
 					Imgproc.cvtColor(imread, imread, Imgproc.COLOR_RGB2GRAY);
-					Mat mat = OpenCvUtil.threshold(imread, -1, (1 << 8) - 1, ThresholdType.OTSU);
+					Mat mat = OpenCvUtil.threshold(imread, -1, (1 << 8) - 1, ThresholdType.OTSU_2D, ThresholdType.BINARY);
 					BufferedImage bufferedImage = OpenCvUtil.byteMat2BufferedImage(mat);
 					imageLabel.setIcon(new ImageIcon(bufferedImage));
 				}
@@ -157,70 +205,108 @@ public class GrafikaMedyczna extends JFrame {
 		};
 	}
 
-	private ActionListener openHoughLinesFileListener() {
+	private ActionListener openImageFileListener() {
 		return ae -> {
 			try {
 				JFileChooser fc = new JFileChooser();
 				int returnVal = fc.showOpenDialog(null);
+				BufferedImage image1 = null;
 				if (returnVal == JFileChooser.APPROVE_OPTION) {
-					file = fc.getSelectedFile();
-
-					String sMaks = (String) JOptionPane.showInputDialog(this, "Choose mask size", "",
-							JOptionPane.PLAIN_MESSAGE, null, null, "");
-					String sLow = (String) JOptionPane.showInputDialog(this, "Choose low treshold", "",
-							JOptionPane.PLAIN_MESSAGE, null, null, "");
-					String sHigh = (String) JOptionPane.showInputDialog(this, "Choose high threshold", "",
-							JOptionPane.PLAIN_MESSAGE, null, null, "");
-
-					// load the file using Java's imageIO library
-					BufferedImage image = ImageIO.read(file);
-					Mat mat = OpenCvUtil.bufferedImageToMat(image);
-					Imgproc.Canny(mat, mat, Double.valueOf(sLow), Double.valueOf(sHigh));
-					image = OpenCvUtil.byteMat2BufferedImage(mat);
-					// create a hough transform object with the right dimensions
-					HoughTransform h = new HoughTransform(image.getWidth(), image.getHeight());
-
-					// add the points from the image (or call the addPoint method separately if your points are not in an image
-					h.addPoints(image);
-
-					// get the lines out
-					Vector<HoughLine> lines = h.getLines(30);
-
-					// draw the lines back onto the image
-					for (int j = 0; j < lines.size(); j++) {
-						HoughLine line = lines.elementAt(j);
-						line.draw(image, Color.RED.getRGB());
-					}
-					imageLabel.setIcon(new ImageIcon(image));
+					File file1 = fc.getSelectedFile();
+					image1 = ImageIO.read(file1);
+					BufferedImage colorImage1 = new BufferedImage(image1.getWidth(), image1.getHeight(), BufferedImage.TYPE_INT_RGB);
+					colorImage1.getGraphics().drawImage(image1, 0, 0, null);
+					imageLabel.setIcon(new ImageIcon(colorImage1));
 				}
-			} catch (IOException e) {
+				repaint();
+			} catch (Exception e) {
 				e.printStackTrace();
 			}
 		};
 	}
 
+	private ActionListener openContrastFileListener() {
+		return ae -> {
+			try {
+				JFileChooser fc = new JFileChooser();
+				int returnVal = fc.showOpenDialog(null);
+				BufferedImage image1 = null, image2 = null;
+				if (returnVal == JFileChooser.APPROVE_OPTION) {
+					File file1 = fc.getSelectedFile();
+					image1 = ImageIO.read(file1);
+					returnVal = fc.showOpenDialog(null);
+					if (returnVal == JFileChooser.APPROVE_OPTION) {
+						File file2 = fc.getSelectedFile();
+						image2 = ImageIO.read(file2);
+						BufferedImage result = OpenCvUtil.incContrastBySubstaction(image1, image2);
+						imageLabel.setIcon(new ImageIcon(result));
+					}
+				}
+				repaint();
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
+		};
+	}
 
-	private ActionListener openCannyEdgesFileListener() {
+	private GrafikaMedyczna() throws Exception {
+		UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+		setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
+		setTitle("Grafika Medyczna - Krzysztof Osiecki");
+		createMenu();
+		createView();
+		setVisible(true);
+		setSize(1920, 1080);
+	}
+
+	private void menuItem(JMenu menu, String name, ActionListener actionListener) {
+		JMenuItem mitem = new JMenuItem(name);
+		mitem.addActionListener(actionListener);
+		menu.add(mitem);
+	}
+
+	private void createView() {
+		this.setLayout(new MigLayout());
+		imageLabel = new JLabel();
+		imageLabel.setPreferredSize(new Dimension(2000, 2000));
+		add(imageLabel);
+	}
+
+	private void createMenu() {
+		JMenuBar menuBar = new JMenuBar();
+		setJMenuBar(menuBar);
+		//submenu file
+		JMenu menu = new JMenu("File");
+		menuBar.add(menu);
+		//itemy otwierania pliku
+		menuItem(menu, "Open regular image", openImageFileListener());
+		menuItem(menu, "Open for contrast", openContrastFileListener());
+		menuItem(menu, "Open for 2d Otsu", open2dOtsuFileListener());
+		menuItem(menu, "Skeletonization", openSkeletonizationFileListener());
+		menuItem(menu, "Index regions", openRegionIndexingFileListener());
+		//todo
+		menuItem(menu, "Find edges", openCannyEdgesFileListener());
+		menuItem(menu, "Find Hough Lines", openHoughLinesFileListener());
+		menuItem(menu, "Open watershed video", openWatershedListener());
+//		menuItem(menu, "Open for xray", openXrayFileListener());
+//		menuItem(menu, "Open for xray segmentation", openSegmentationFileListener());
+//		menuItem(menu, "Open for Otsu", openOtsuFileListener());
+		menu.addSeparator();
+		//item wyjscia z aplikacji
+		menuItem(menu, "Exit", ae -> System.exit(0));
+	}
+
+	private ActionListener openOtsuFileListener() {
 		return ae -> {
 			try {
 				JFileChooser fc = new JFileChooser();
 				int returnVal = fc.showOpenDialog(null);
 				if (returnVal == JFileChooser.APPROVE_OPTION) {
 					file = fc.getSelectedFile();
-					String s = (String) JOptionPane.showInputDialog(this, "Choose sigma", "",
-							JOptionPane.PLAIN_MESSAGE, null, null, "");
-					BufferedImage read = ImageIO.read(file);
 					Mat imread = Highgui.imread(file.getAbsolutePath());
-					CannyEdgeDetector detector = new CannyEdgeDetector();
-					detector.setLowThreshold(0.5f);
-					detector.setHighThreshold(1f);
-					detector.setSourceImage(read);
-					detector.process();
-					Mat original = OpenCvUtil.bufferedImageToMat(read);
-					BufferedImage edges = detector.getEdgesImage();
-					Mat edg = OpenCvUtil.bufferedImageToMatInt(edges);
-					Core.add(original, edg, original);
-					BufferedImage bufferedImage = OpenCvUtil.byteMat2RgbBufferedImage(edg);
+					Imgproc.cvtColor(imread, imread, Imgproc.COLOR_RGB2GRAY);
+					Mat mat = OpenCvUtil.threshold(imread, -1, (1 << 8) - 1, ThresholdType.OTSU, ThresholdType.BINARY);
+					BufferedImage bufferedImage = OpenCvUtil.byteMat2BufferedImage(mat);
 					imageLabel.setIcon(new ImageIcon(bufferedImage));
 				}
 				repaint();
@@ -276,74 +362,6 @@ public class GrafikaMedyczna extends JFrame {
 			}
 		};
 	}
-
-	private ActionListener openImageFileListener() {
-		return ae -> {
-			try {
-				JFileChooser fc = new JFileChooser();
-				int returnVal = fc.showOpenDialog(null);
-				BufferedImage image1 = null;
-				if (returnVal == JFileChooser.APPROVE_OPTION) {
-					File file1 = fc.getSelectedFile();
-					image1 = ImageIO.read(file1);
-					BufferedImage colorImage1 = new BufferedImage(image1.getWidth(), image1.getHeight(), BufferedImage.TYPE_INT_RGB);
-					colorImage1.getGraphics().drawImage(image1, 0, 0, null);
-					imageLabel.setIcon(new ImageIcon(colorImage1));
-				}
-				repaint();
-			} catch (Exception e) {
-				e.printStackTrace();
-			}
-		};
-	}
-
-	private ActionListener openContrastFileListener() {
-		return ae -> {
-			try {
-				JFileChooser fc = new JFileChooser();
-				int returnVal = fc.showOpenDialog(null);
-				BufferedImage image1 = null, image2 = null;
-				if (returnVal == JFileChooser.APPROVE_OPTION) {
-					File file1 = fc.getSelectedFile();
-					image1 = ImageIO.read(file1);
-					returnVal = fc.showOpenDialog(null);
-					if (returnVal == JFileChooser.APPROVE_OPTION) {
-						File file2 = fc.getSelectedFile();
-						image2 = ImageIO.read(file2);
-						BufferedImage result = OpenCvUtil.incContrastBySubstaction(image1, image2);
-						imageLabel.setIcon(new ImageIcon(result));
-					}
-				}
-				repaint();
-			} catch (Exception e) {
-				e.printStackTrace();
-			}
-		};
-	}
-
-	private void menuItem(JMenu menu, String name, ActionListener actionListener) {
-		JMenuItem mitem = new JMenuItem(name);
-		mitem.addActionListener(actionListener);
-		menu.add(mitem);
-	}
-
-	private GrafikaMedyczna() throws Exception {
-		UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
-		setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
-		setTitle("Grafika Medyczna - Krzysztof Osiecki");
-		createMenu();
-		createView();
-		setVisible(true);
-		setSize(1920, 1080);
-	}
-
-	private void createView() {
-		this.setLayout(new MigLayout());
-		imageLabel = new JLabel();
-		imageLabel.setPreferredSize(new Dimension(2000, 2000));
-		add(imageLabel);
-	}
-
 }
 
 

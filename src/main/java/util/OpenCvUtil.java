@@ -1,12 +1,15 @@
 package util;
 
 import data.ThresholdType;
+import javaslang.Tuple;
+import javaslang.Tuple2;
 import org.opencv.core.*;
 import org.opencv.highgui.Highgui;
 import org.opencv.imgproc.Imgproc;
 
 import java.awt.*;
-import java.awt.image.*;
+import java.awt.image.BufferedImage;
+import java.awt.image.DataBufferByte;
 import java.io.File;
 import java.util.*;
 import java.util.List;
@@ -16,48 +19,6 @@ public class OpenCvUtil {
 	private static Random random = new Random();
 
 	private static List<Color> colors = Arrays.asList(Color.green, Color.blue, Color.black, Color.red, Color.cyan, Color.yellow, Color.magenta);
-
-	public static BufferedImage shortMat2BufferedImage(Mat m) {
-		int bufferSize = m.channels() * m.cols() * m.rows();
-		short[] b = new short[bufferSize];
-		m.get(0, 0, b);
-		BufferedImage image = new BufferedImage(m.cols(), m.rows(), BufferedImage.TYPE_USHORT_GRAY);
-		final short[] targetPixels = ((DataBufferUShort) image.getRaster().getDataBuffer()).getData();
-		System.arraycopy(b, 0, targetPixels, 0, b.length);
-		return image;
-	}
-
-	public static BufferedImage intMat2BufferedImage(Mat m) {
-		int bufferSize = m.channels() * m.cols() * m.rows();
-		int[] b = new int[bufferSize];
-		m.get(0, 0, b);
-		BufferedImage image = new BufferedImage(m.cols(), m.rows(), BufferedImage.TYPE_USHORT_GRAY);
-		final int[] targetPixels = ((DataBufferInt) image.getRaster().getDataBuffer()).getData();
-		System.arraycopy(b, 0, targetPixels, 0, b.length);
-		return image;
-	}
-
-	public static BufferedImage ioubleMat2BufferedImage(Mat m) {
-		int bufferSize = m.channels() * m.cols() * m.rows();
-		double[] b = new double[bufferSize];
-		m.get(0, 0, b);
-		BufferedImage image = new BufferedImage(m.cols(), m.rows(), BufferedImage.TYPE_USHORT_GRAY);
-		final double[] targetPixels = ((DataBufferDouble) image.getRaster().getDataBuffer()).getData();
-		System.arraycopy(b, 0, targetPixels, 0, b.length);
-		return image;
-	}
-
-	public static BufferedImage floatMat2BufferedImage(Mat m) {
-		int bufferSize = m.channels() * m.cols() * m.rows();
-		float[] b = new float[bufferSize];
-		m.get(0, 0, b);
-		BufferedImage image = new BufferedImage(m.cols(), m.rows(), BufferedImage.TYPE_INT_ARGB);
-		final int[] targetPixels = ((DataBufferInt) image.getRaster().getDataBuffer()).getData();
-		for(int i = 0; i < targetPixels.length; i++) {
-			targetPixels[i] = (int) b[i];
-		}
-		return image;
-	}
 
 	public static BufferedImage byteMat2BufferedImage(Mat m) {
 		int bufferSize = m.channels() * m.cols() * m.rows();
@@ -96,14 +57,17 @@ public class OpenCvUtil {
 		return mat;
 	}
 
-	public static Mat threshold(Mat src, double thresh, double max, ThresholdType type) {
+	public static Mat threshold(Mat src, double thresh, double max, ThresholdType type, ThresholdType alternative) {
 		byte[] dataArray = new byte[src.cols() * src.rows() * src.channels()];
 		int[] resultArray = new int[src.cols() * src.rows() * src.channels()];
 		src.get(0, 0, dataArray);
-		int[] intData = toIntArray(dataArray);
-		if (type == ThresholdType.OTSU) {
+		int[] intData = ValueConverter.toIntArray(dataArray);
+		if (type == ThresholdType.OTSU_2D) {
+			thresh = calculate2dOtsu(intData, src.height(), src.width());
+			type = alternative;
+		} else if (type == ThresholdType.OTSU) {
 			thresh = calculateOtsu(intData);
-			type = ThresholdType.BINARY;
+			type = alternative;
 		}
 		for (int i = 0; i < dataArray.length; i++) {
 			switch (type) {
@@ -125,16 +89,82 @@ public class OpenCvUtil {
 			}
 		}
 		Mat resultMat = new Mat(src.rows(), src.cols(), src.type());
-		resultMat.put(0, 0, toByteArray(resultArray));
+		resultMat.put(0, 0, ValueConverter.toByteArray(resultArray));
 		return resultMat;
+	}
+
+	private static int calculate2dOtsu(int[] intData, int width, int height) {
+		int[][] histogram = new int[256][256];
+		double[][] normalizedHistogram = new double[256][256];
+		int[][] data = normalMake2D(intData, width, height);
+		double maksWariancja = 0.0;
+		int result = 0;
+		int pixelCount = width * height;
+		for (int y = 0; y < height; ++y) {
+			for (int x = 0; x < width; ++x) {
+				histogram[data[x][y]][calculateNeighborsAverage(data, x, y, width, height)]++;
+			}
+		}
+		for (int y = 0; y < 256; ++y) {
+			for (int x = 0; x < 256; ++x) {
+				normalizedHistogram[x][y] = histogram[x][y] / (double) pixelCount;
+			}
+		}
+		double pTla = 0;
+		double uTi = 0.0;
+		double uTj = 0.0;
+		double pObiektu = 0.0;
+		double u0i = 0.0;
+		double u0j = 0.0;
+		double u1i;
+		double u1j;
+		for (int y = 0; y < 256; ++y) {
+			for (int x = 0; x < 256; ++x) {
+				pTla += normalizedHistogram[x][y];
+				uTi += x * normalizedHistogram[x][y];
+				uTj += y * normalizedHistogram[x][y];
+			}
+		}
+		for (int t = 0; t < 256; t++) {
+			for (int s = 0; s < 256; s++) {
+				pObiektu += normalizedHistogram[t][s];
+				pTla -= normalizedHistogram[t][s];
+				u0i += (t * normalizedHistogram[t][s]);
+				u1i = uTi - u0i;
+				u0j += (s * normalizedHistogram[t][s]);
+				u1j = uTj - u0j;
+
+				double tr = pObiektu * (Math.pow((u0i / pObiektu - uTi), 2) + Math.pow((u0j / pObiektu - uTj), 2)) +
+						pTla * (Math.pow((u1i / pTla - uTi), 2) + Math.pow((u1j / pTla - uTj), 2));
+				if (tr > maksWariancja) {
+					maksWariancja = tr;
+					result = t;
+				}
+			}
+		}
+		return result;
+	}
+
+	private static int calculateNeighborsAverage(int[][] data, int x, int y, int width, int height) {
+		int suma = 0;
+		for (int k = -1; k <= 1; k++) {
+			for (int l = -1; l <= 1; l++) {
+				if (x + k > 0 && x + k < width) {
+					if (y + l > 0 && y + l < height) {
+						suma += data[x + k][y + l];
+					}
+				}
+			}
+		}
+		return suma / 9;
 	}
 
 	private static double calculateOtsu(int[] intData) {
 		int[] histogram = new int[256];
 		double maksWariancja = 0.0;
 		int result = 0;
-		for (int i = 0; i < intData.length; i++) {
-			histogram[intData[i]]++;
+		for (int value : intData) {
+			histogram[value]++;
 		}
 		for (int t = 0; t < 256; t++) {
 			int pObiektu = 0;
@@ -165,10 +195,10 @@ public class OpenCvUtil {
 	public static Mat calculateThreshold(Mat imread, int levels, int max, ThresholdType type, boolean color) {
 		double initialTreshold = max;
 		byte[] v = new byte[imread.cols() * imread.rows() * 3];
-		Mat mat = new Mat(imread.rows(), imread.cols(), CvType.CV_8UC3, new Scalar(0));
+		Mat mat = new Mat(imread.rows(), imread.cols(), imread.type(), new Scalar(0));
 		for (int i = 0; i < levels; i++) {
 			Mat clone = imread.clone();
-			clone = threshold(clone, initialTreshold, max - 1, type);
+			clone = threshold(clone, initialTreshold, max - 1, type, ThresholdType.BINARY);
 			if (color) {
 				Imgproc.cvtColor(clone, clone, Imgproc.COLOR_GRAY2BGR);
 				int k = 0;
@@ -215,25 +245,7 @@ public class OpenCvUtil {
 		return mat;
 	}
 
-
-	public static Mat bufferedImageToMatInt(BufferedImage read) {
-		int[] pixels = ((DataBufferInt) read.getRaster().getDataBuffer()).getData();
-		byte[] perChannels = new byte[pixels.length * 3];
-		int i = 0;
-		for (int pixel : pixels) {
-			int jred = ImageHelper.jred(pixel);
-			int jgreen = ImageHelper.jgreen(pixel);
-			int jblue = ImageHelper.jblue(pixel);
-			perChannels[i] = (byte) jred;
-			perChannels[i + 1] = (byte) jgreen;
-			perChannels[i + 2] = (byte) jblue;
-			i += 3;
-		}
-		Mat mat = new Mat(read.getHeight(), read.getWidth(), CvType.CV_8UC3);
-		mat.put(0, 0, perChannels);
-		return mat;
-	}
-
+	@Deprecated
 	public static BufferedImage performHoughLinesDetection(File file, double hysteresisTresholdLow, double hysteresisTresholdHigh, double maskSize) {
 		Mat imread = Highgui.imread(file.getAbsolutePath());
 		Mat tresh = imread.clone();
@@ -256,7 +268,6 @@ public class OpenCvUtil {
 		return OpenCvUtil.byteMat2RgbBufferedImage(imread);
 	}
 
-
 	private static int[][] normalMake2D(int[] array, int width, int height) {
 		int[][] ints = new int[width][height];
 		int i = 0;
@@ -269,7 +280,7 @@ public class OpenCvUtil {
 		return ints;
 	}
 
-	private static int[][] make2D(int[] array, int width, int height) {
+	private static int[][] fingstupudmetthod(int[] array, int width, int height) {
 		int[][] ints = new int[width][height];
 		int i = 0;
 		for (int y = 0; y < height; ++y) {
@@ -281,7 +292,7 @@ public class OpenCvUtil {
 		return ints;
 	}
 
-	private static int[] make1D(int[][] array, int width, int height) {
+	private static int[] finStupidMethod(int[][] array, int width, int height) {
 		int[] ints = new int[width * height];
 		int i = 0;
 		for (int y = 0; y < height; ++y) {
@@ -293,35 +304,11 @@ public class OpenCvUtil {
 		return ints;
 	}
 
-	private static byte[][] make2D(byte[] array, int width, int height) {
-		byte[][] ints = new byte[width][height];
-		int i = 0;
-		for (int y = 0; y < height; ++y) {
-			for (int x = 0; x < width; ++x) {
-				ints[x][y] = array[i];
-				i++;
-			}
-		}
-		return ints;
-	}
-
-	private static byte[] make1D(byte[][] array, int width, int height) {
-		byte[] ints = new byte[width * height];
-		int i = 0;
-		for (int y = 0; y < height; ++y) {
-			for (int x = 0; x < width; ++x) {
-				ints[i] = array[x][y];
-				i++;
-			}
-		}
-		return ints;
-	}
-
 	public static int[] doHilditchsThinning(int[] data, int width, int height) {
-		int[][] binaryImage = make2D(data, width, height);
+		int[][] binaryImage = fingstupudmetthod(data, width, height);
 		int[] copy = new int[width * height];
 		System.arraycopy(data, 0, copy, 0, width * height);
-		int[][] bu = make2D(copy, width, height);
+		int[][] bu = fingstupudmetthod(copy, width, height);
 		int a, b;
 		boolean hasChange;
 		do {
@@ -338,11 +325,11 @@ public class OpenCvUtil {
 					}
 				}
 			}
-			int[] ints = make1D(bu, width, height);
-			binaryImage = make2D(ints, width, height);
+			int[] ints = finStupidMethod(bu, width, height);
+			binaryImage = fingstupudmetthod(ints, width, height);
 		} while (hasChange);
 
-		return make1D(binaryImage, width, height);
+		return finStupidMethod(binaryImage, width, height);
 	}
 
 	private static int getA(int[][] binaryImage, int y, int x) {
@@ -379,9 +366,7 @@ public class OpenCvUtil {
 		if (y - 1 >= 0 && x - 1 >= 0 && binaryImage[y - 1][x - 1] == 0 && binaryImage[y - 1][x] == 1) {
 			count++;
 		}
-
 		return count;
-
 	}
 
 	private static int getB(int[][] binaryImage, int y, int x) {
@@ -390,8 +375,8 @@ public class OpenCvUtil {
 	}
 
 	public static BufferedImage indexRegions(Mat imread) {
-		int width = imread.cols();
-		int height = imread.rows();
+		int width = imread.rows();
+		int height = imread.cols();
 		int highestRegion = 1;
 		byte[] data = new byte[width * height];
 		imread.get(0, 0, data);
@@ -399,9 +384,9 @@ public class OpenCvUtil {
 		for (int i = 0; i < data.length; i++) {
 			ints[i] = ((int) data[i]) == 0 ? 1 : 0;
 		}
-		int[][] data2s = normalMake2D(ints, height, width);
-		for (int y = 0; y < height; y++) {
-			for (int x = 0; x < width; x++) {
+		int[][] data2s = normalMake2D(ints, width, height);
+		for (int y = 0; y < width; y++) {
+			for (int x = 0; x < height; x++) {
 				if (data2s[y][x] != 0) {
 					int top = Integer.MAX_VALUE;
 					int left = Integer.MAX_VALUE;
@@ -420,7 +405,7 @@ public class OpenCvUtil {
 						if (left < top) {
 							if (left != 0) {
 								data2s[y][x] = left;
-								replace(data2s, top, left, x, y);
+								replace(data2s, top, left);
 								//zamien wszystkie topy na lefty
 							} else {
 								data2s[y][x] = top;
@@ -429,7 +414,7 @@ public class OpenCvUtil {
 						} else if (left > top) {
 							if (top != 0) {
 								data2s[y][x] = top;
-								replace(data2s, left, top, x, y);
+								replace(data2s, left, top);
 							} else {
 								data2s[y][x] = left;
 								//zamien wszystkie lefty na topy
@@ -468,7 +453,7 @@ public class OpenCvUtil {
 		return byteMat2RgbBufferedImage(mat);
 	}
 
-	public static void replace(int[][] array, int from, int to, int upToX, int upToY) {
+	private static void replace(int[][] array, int from, int to) {
 		for (int i = 0; i < array.length; i++) {
 			for (int j = 0; j < array[i].length; j++) {
 				array[i][j] = array[i][j] == from ? to : array[i][j];
@@ -476,19 +461,108 @@ public class OpenCvUtil {
 		}
 	}
 
-	public static int[] toIntArray(byte[] array) {
-		int[] ints = new int[array.length];
-		for (int i = 0; i < array.length; i++) {
-			ints[i] = array[i] & 0xff;
-		}
-		return ints;
+	public static BufferedImage performCannyDetection(BufferedImage read, Double sigma, Integer low, Integer high) {
+		Mat mat = OpenCvUtil.bufferedImageToMat(read);
+		Mat grayMat = new Mat(mat.rows(), mat.cols(), CvType.CV_8UC1);
+		Imgproc.cvtColor(mat, grayMat, Imgproc.COLOR_RGB2GRAY);
+		Imgproc.GaussianBlur(grayMat, grayMat, new Size(), sigma);
+		Mat dx = new Mat();
+		Mat dy = new Mat();
+		Imgproc.Sobel(grayMat, dx, -1, 1, 0, 3, 1, 0);
+		Imgproc.Sobel(grayMat, dy, -1, 0, 1, 3, 1, 0);
+		int[][] xAsIntArray = ValueConverter.getIntArray(dx);
+		int[][] yAsIntArray = ValueConverter.getIntArray(dy);
+		int[][] magnitude = new int[grayMat.rows()][grayMat.cols()];
+		Direction[][] direction = new Direction[grayMat.rows()][grayMat.cols()];
+		calulateMagnitudeAndDirection(grayMat, xAsIntArray, yAsIntArray, magnitude, direction);
+		Mat result = new Mat(grayMat.rows(), grayMat.cols(), CvType.CV_8UC1);
+		result.put(0, 0, ValueConverter.toByteArray(ValueConverter.make1D(magnitude, grayMat.rows(), grayMat.cols())));
+//		result = threshold(result, 255, 255, ThresholdType.OTSU_2D, ThresholdType.THRESH_TOZERO);
+		int[][] mag = ValueConverter.getIntArray(result);
+		mag = suppressNonMaxPixels(mag, direction);
+		int[] ints = performHysteresis(ValueConverter.make1D(mag, grayMat.rows(), grayMat.cols()), low, high, grayMat.height(), grayMat.width());
+		result.put(0, 0, ValueConverter.toByteArray(ints));
+//		result.put(0, 0, ValueConverter.toByteArray(ValueConverter.make1D(mag, grayMat.rows(), grayMat.cols())));
+		return byteMat2BufferedImage(result);
 	}
 
-	public static byte[] toByteArray(int[] array) {
-		byte[] bytes = new byte[array.length];
-		for (int i = 0; i < array.length; i++) {
-			bytes[i] = (byte) array[i];
+	private static int[] performHysteresis(int[] mag, int low, int high, int height, int width) {
+		int[] data = new int[height * width];
+		int offset = 0;
+		for (int y = 0; y < height; y++) {
+			for (int x = 0; x < width; x++) {
+				if (data[offset] == 0 && mag[offset] >= high) {
+					follow(data, mag, x, y, offset, low, width, height);
+				}
+				offset++;
+			}
 		}
-		return bytes;
+		return data;
+	}
+
+	private static void follow(int[] data, int[] mag, int x1, int y1, int i1, int threshold, int width, int height) {
+		int x0 = x1 == 0 ? x1 : x1 - 1;
+		int x2 = x1 == width - 1 ? x1 : x1 + 1;
+		int y0 = y1 == 0 ? y1 : y1 - 1;
+		int y2 = y1 == height - 1 ? y1 : y1 + 1;
+		data[i1] = mag[i1];
+		for (int x = x0; x <= x2; x++) {
+			for (int y = y0; y <= y2; y++) {
+				int i2 = x + y * width;
+				if ((y != y1 || x != x1)
+						&& data[i2] == 0
+						&& mag[i2] >= threshold) {
+					follow(data, mag, x, y, i2, threshold, width, height);
+					return;
+				}
+			}
+		}
+	}
+
+	private static int[][] suppressNonMaxPixels(int[][] mag, Direction[][] direction) {
+		int[][] result = new int[mag.length][mag[0].length];
+		boolean changes = true;
+		while (changes) {
+			changes = false;
+			for (int x = 0; x < mag.length; x++) {
+				for (int y = 0; y < mag[x].length; y++) {
+					if (mag[x][y] > 0) {
+						Tuple2<Integer, Integer> firstNeibourgh = Tuple.of(
+								x + direction[x][y].getX1() < 0 || x + direction[x][y].getX1() >= mag.length ? x : x + direction[x][y].getX1(),
+								y + direction[x][y].getY1() < 0 || y + direction[x][y].getY1() >= mag[x].length ? y : y + direction[x][y].getY1()
+						);
+						Tuple2<Integer, Integer> secondNeibourgh = Tuple.of(
+								x + direction[x][y].getX2() < 0 || x + direction[x][y].getX2() >= mag.length ? x : x + direction[x][y].getX2(),
+								y + direction[x][y].getY2() < 0 || y + direction[x][y].getY2() >= mag[x].length ? y : y + direction[x][y].getY2()
+						);
+						if (mag[x][y] >= mag[firstNeibourgh._1][firstNeibourgh._2]
+								&& mag[x][y] >= mag[secondNeibourgh._1][secondNeibourgh._2]) {
+							result[x][y] = mag[x][y];
+						} else {
+							changes = true;
+						}
+					}
+				}
+			}
+			for (int x = 0; x < mag.length; x++) {
+				for (int y = 0; y < mag[x].length; y++) {
+					mag[x][y] = result[x][y];
+				}
+			}
+
+		}
+		return result;
+	}
+
+	private static void calulateMagnitudeAndDirection(Mat grayMat, int[][] xAsIntArray, int[][] yAsIntArray, int[][] magnitude,
+			Direction[][] direction) {
+		for (int x = 0; x < grayMat.rows(); x++) {
+			for (int y = 0; y < grayMat.cols(); y++) {
+				int hypot = (int) Math.hypot(xAsIntArray[x][y], yAsIntArray[x][y]);
+				double v = Math.toDegrees(Math.atan2(yAsIntArray[x][y], xAsIntArray[x][y]));
+				magnitude[x][y] = hypot;
+				direction[x][y] = Direction.of(v);
+			}
+		}
 	}
 }

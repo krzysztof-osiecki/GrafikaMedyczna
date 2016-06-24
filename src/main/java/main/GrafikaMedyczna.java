@@ -3,11 +3,16 @@ package main;
 import data.ThresholdType;
 import net.miginfocom.swing.MigLayout;
 import org.apache.commons.io.IOUtils;
-import org.opencv.core.*;
+import org.opencv.core.Core;
+import org.opencv.core.CvType;
+import org.opencv.core.Mat;
 import org.opencv.highgui.Highgui;
 import org.opencv.highgui.VideoCapture;
 import org.opencv.imgproc.Imgproc;
-import util.*;
+import util.CannyEdgeDetector;
+import util.ImageHelper;
+import util.OpenCvUtil;
+import util.RegionIndexer;
 
 import javax.imageio.ImageIO;
 import javax.swing.*;
@@ -17,7 +22,6 @@ import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
-import java.util.Vector;
 
 public class GrafikaMedyczna extends JFrame {
 
@@ -78,20 +82,6 @@ public class GrafikaMedyczna extends JFrame {
           Mat mat = OpenCvUtil.bufferedImageToMat(image);
           Imgproc.Canny(mat, mat, Double.valueOf(sLow), Double.valueOf(sHigh));
           image = OpenCvUtil.byteMat2BufferedImage(mat);
-          // create a hough transform object with the right dimensions
-          HoughTransform h = new HoughTransform(image.getWidth(), image.getHeight());
-
-          // add the points from the image (or call the addPoint method separately if your points are not in an image
-          h.addPoints(image);
-
-          // get the lines out
-          Vector<HoughLine> lines = h.getLines(30);
-
-          // draw the lines back onto the image
-          for (int j = 0; j < lines.size(); j++) {
-            HoughLine line = lines.elementAt(j);
-            line.draw(image, Color.RED.getRGB());
-          }
           imageLabel.setIcon(new ImageIcon(image));
         }
       } catch (IOException e) {

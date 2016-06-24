@@ -1,17 +1,14 @@
 package util;
 
 import data.ThresholdType;
-import org.opencv.core.Core;
 import org.opencv.core.CvType;
 import org.opencv.core.Mat;
 import org.opencv.core.Scalar;
-import org.opencv.highgui.Highgui;
 import org.opencv.imgproc.Imgproc;
 
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.awt.image.DataBufferByte;
-import java.io.File;
 import java.util.Arrays;
 import java.util.List;
 
@@ -91,6 +88,50 @@ public class OpenCvUtil {
     Mat resultMat = new Mat(src.rows(), src.cols(), src.type());
     resultMat.put(0, 0, ValueConverter.toByteArray(resultArray));
     return resultMat;
+  }
+
+  public static Mat calculateThreshold(Mat imread, int levels, int max, ThresholdType type, boolean color) {
+    double initialTreshold = max;
+    byte[] v = new byte[imread.cols() * imread.rows() * 3];
+    Mat mat = new Mat(imread.rows(), imread.cols(), imread.type(), new Scalar(0));
+    for (int i = 0; i < levels; i++) {
+      Mat clone = imread.clone();
+      clone = threshold(clone, initialTreshold, max - 1, type, ThresholdType.BINARY);
+      if (color) {
+        Imgproc.cvtColor(clone, clone, Imgproc.COLOR_GRAY2BGR);
+        int k = 0;
+        for (int y = 0; y < clone.rows(); y++) {
+          for (int x = 0; x < clone.cols(); x++) {
+            double[] doubles = clone.get(y, x);
+            if (!allZeros(doubles)) {
+              v[k] = (byte) colors.get(i).getBlue();
+              v[k + 1] = (byte) colors.get(i).getGreen();
+              v[k + 2] = (byte) colors.get(i).getRed();
+            }
+            k += 3;
+          }
+        }
+      }
+      initialTreshold -= max / (double) levels;
+    }
+    mat.put(0, 0, v);
+    return mat;
+  }
+
+  public static BufferedImage incContrastBySubstaction(BufferedImage image1, BufferedImage image2) {
+    BufferedImage colorImage1 = new BufferedImage(image1.getWidth(), image1.getHeight(), BufferedImage.TYPE_INT_RGB);
+    colorImage1.getGraphics().drawImage(image1, 0, 0, null);
+    BufferedImage colorImage2 = new BufferedImage(image2.getWidth(), image2.getHeight(), BufferedImage.TYPE_INT_RGB);
+    colorImage2.getGraphics().drawImage(image2, 0, 0, null);
+    BufferedImage substract = ImageHelper.substract(colorImage2, colorImage1, 5);
+    return ImageHelper.substract(substract, colorImage1, 1);
+  }
+
+  public static Mat bufferedImageToMat(BufferedImage read) {
+    byte[] pixels = ((DataBufferByte) read.getRaster().getDataBuffer()).getData();
+    Mat mat = new Mat(read.getHeight(), read.getWidth(), CvType.CV_8UC3);
+    mat.put(0, 0, pixels);
+    return mat;
   }
 
   private static int calculate2dOtsu(int[] intData, int width, int height) {
@@ -192,34 +233,6 @@ public class OpenCvUtil {
     return result;
   }
 
-  public static Mat calculateThreshold(Mat imread, int levels, int max, ThresholdType type, boolean color) {
-    double initialTreshold = max;
-    byte[] v = new byte[imread.cols() * imread.rows() * 3];
-    Mat mat = new Mat(imread.rows(), imread.cols(), imread.type(), new Scalar(0));
-    for (int i = 0; i < levels; i++) {
-      Mat clone = imread.clone();
-      clone = threshold(clone, initialTreshold, max - 1, type, ThresholdType.BINARY);
-      if (color) {
-        Imgproc.cvtColor(clone, clone, Imgproc.COLOR_GRAY2BGR);
-        int k = 0;
-        for (int y = 0; y < clone.rows(); y++) {
-          for (int x = 0; x < clone.cols(); x++) {
-            double[] doubles = clone.get(y, x);
-            if (!allZeros(doubles)) {
-              v[k] = (byte) colors.get(i).getBlue();
-              v[k + 1] = (byte) colors.get(i).getGreen();
-              v[k + 2] = (byte) colors.get(i).getRed();
-            }
-            k += 3;
-          }
-        }
-      }
-      initialTreshold -= max / (double) levels;
-    }
-    mat.put(0, 0, v);
-    return mat;
-  }
-
   private static boolean allZeros(double[] array) {
     for (double val : array) {
       if (val != 0) {
@@ -228,145 +241,4 @@ public class OpenCvUtil {
     }
     return true;
   }
-
-  public static BufferedImage incContrastBySubstaction(BufferedImage image1, BufferedImage image2) {
-    BufferedImage colorImage1 = new BufferedImage(image1.getWidth(), image1.getHeight(), BufferedImage.TYPE_INT_RGB);
-    colorImage1.getGraphics().drawImage(image1, 0, 0, null);
-    BufferedImage colorImage2 = new BufferedImage(image2.getWidth(), image2.getHeight(), BufferedImage.TYPE_INT_RGB);
-    colorImage2.getGraphics().drawImage(image2, 0, 0, null);
-    BufferedImage substract = ImageHelper.substract(colorImage2, colorImage1, 5);
-    return ImageHelper.substract(substract, colorImage1, 1);
-  }
-
-  public static Mat bufferedImageToMat(BufferedImage read) {
-    byte[] pixels = ((DataBufferByte) read.getRaster().getDataBuffer()).getData();
-    Mat mat = new Mat(read.getHeight(), read.getWidth(), CvType.CV_8UC3);
-    mat.put(0, 0, pixels);
-    return mat;
-  }
-
-  @Deprecated
-  public static BufferedImage performHoughLinesDetection(File file, double hysteresisTresholdLow,
-                                                         double hysteresisTresholdHigh, double maskSize) {
-    Mat imread = Highgui.imread(file.getAbsolutePath());
-    Mat tresh = imread.clone();
-    double[] doubles = imread.get(0, 0);
-    tresh.put(0, 0, doubles);
-    Mat lines = new Mat();
-    Imgproc.Canny(tresh, tresh, hysteresisTresholdLow, hysteresisTresholdHigh);
-    Imgproc.HoughLinesP(tresh, lines, maskSize, Math.PI / 180.0, 80, 30, 10);
-    Imgproc.cvtColor(tresh, tresh, Imgproc.COLOR_GRAY2RGB);
-    for (int x = 0; x < lines.cols(); x++) {
-      double[] vec = lines.get(0, x);
-      double x1 = vec[0],
-          y1 = vec[1],
-          x2 = vec[2],
-          y2 = vec[3];
-      org.opencv.core.Point start = new org.opencv.core.Point(x1, y1);
-      org.opencv.core.Point end = new org.opencv.core.Point(x2, y2);
-      Core.line(imread, start, end, new Scalar(0, 255, 0), 1);
-    }
-    return OpenCvUtil.byteMat2RgbBufferedImage(imread);
-  }
-
-  private static int[][] fingstupudmetthod(int[] array, int width, int height) {
-    int[][] ints = new int[width][height];
-    int i = 0;
-    for (int y = 0; y < height; ++y) {
-      for (int x = 0; x < width; ++x) {
-        ints[x][y] = array[i] > 16777215 / 2 ? 0 : 1;
-        i++;
-      }
-    }
-    return ints;
-  }
-
-  private static int[] finStupidMethod(int[][] array, int width, int height) {
-    int[] ints = new int[width * height];
-    int i = 0;
-    for (int y = 0; y < height; ++y) {
-      for (int x = 0; x < width; ++x) {
-        ints[i] = array[x][y] == 0 ? 16777215 : 0;
-        i++;
-      }
-    }
-    return ints;
-  }
-
-  public static int[] doHilditchsThinning(int[] data, int width, int height) {
-    int[][] binaryImage = fingstupudmetthod(data, width, height);
-    int[] copy = new int[width * height];
-    System.arraycopy(data, 0, copy, 0, width * height);
-    int[][] bu = fingstupudmetthod(copy, width, height);
-    int a, b;
-    boolean hasChange;
-    do {
-      hasChange = false;
-      for (int y = 1; y + 1 < binaryImage.length; y++) {
-        for (int x = 1; x + 1 < binaryImage[y].length; x++) {
-          a = getA(binaryImage, y, x);
-          b = getB(binaryImage, y, x);
-          if ((binaryImage[y][x] == 1) && ((2 <= b) && (b <= 6)) && (a == 1) &&
-              ((binaryImage[y - 1][x] * binaryImage[y][x + 1] * binaryImage[y][x - 1] == 0) ||
-                  (getA(binaryImage, y - 1, x) != 1)) &&
-              ((binaryImage[y - 1][x] * binaryImage[y][x + 1] * binaryImage[y + 1][x] == 0) ||
-                  (getA(binaryImage, y, x + 1) != 1))) {
-            bu[y][x] = 0;
-            hasChange = true;
-          }
-        }
-      }
-      int[] ints = finStupidMethod(bu, width, height);
-      binaryImage = fingstupudmetthod(ints, width, height);
-    } while (hasChange);
-
-    return finStupidMethod(binaryImage, width, height);
-  }
-
-  private static int getA(int[][] binaryImage, int y, int x) {
-    int count = 0;
-    //p2 p3
-    if (y - 1 >= 0 && x + 1 < binaryImage[y].length && binaryImage[y - 1][x] == 0 && binaryImage[y - 1][x + 1] == 1) {
-      count++;
-    }
-    //p3 p4
-    if (y - 1 >= 0 && x + 1 < binaryImage[y].length && binaryImage[y - 1][x + 1] == 0 && binaryImage[y][x + 1] == 1) {
-      count++;
-    }
-    //p4 p5
-    if (y + 1 < binaryImage.length && x + 1 < binaryImage[y].length && binaryImage[y][x + 1] == 0 &&
-        binaryImage[y + 1][x + 1] == 1) {
-      count++;
-    }
-    //p5 p6
-    if (y + 1 < binaryImage.length && x + 1 < binaryImage[y].length && binaryImage[y + 1][x + 1] == 0 &&
-        binaryImage[y + 1][x] == 1) {
-      count++;
-    }
-    //p6 p7
-    if (y + 1 < binaryImage.length && x - 1 >= 0 && binaryImage[y + 1][x] == 0 && binaryImage[y + 1][x - 1] == 1) {
-      count++;
-    }
-    //p7 p8
-    if (y + 1 < binaryImage.length && x - 1 >= 0 && binaryImage[y + 1][x - 1] == 0 && binaryImage[y][x - 1] == 1) {
-      count++;
-    }
-    //p8 p9
-    if (y - 1 >= 0 && x - 1 >= 0 && binaryImage[y][x - 1] == 0 && binaryImage[y - 1][x - 1] == 1) {
-      count++;
-    }
-    //p9 p2
-    if (y - 1 >= 0 && x - 1 >= 0 && binaryImage[y - 1][x - 1] == 0 && binaryImage[y - 1][x] == 1) {
-      count++;
-    }
-    return count;
-  }
-
-  private static int getB(int[][] binaryImage, int y, int x) {
-    return binaryImage[y - 1][x] + binaryImage[y - 1][x + 1] + binaryImage[y][x + 1] + binaryImage[y + 1][x + 1] +
-        binaryImage[y + 1][x] +
-        binaryImage[y + 1][x - 1] + binaryImage[y][x - 1] + binaryImage[y - 1][x - 1];
-  }
-
-
 }

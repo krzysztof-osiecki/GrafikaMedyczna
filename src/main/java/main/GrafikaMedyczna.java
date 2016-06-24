@@ -10,6 +10,7 @@ import org.opencv.highgui.Highgui;
 import org.opencv.highgui.VideoCapture;
 import org.opencv.imgproc.Imgproc;
 import util.CannyEdgeDetector;
+import util.HilditchsThinner;
 import util.ImageHelper;
 import util.OpenCvUtil;
 import util.RegionIndexer;
@@ -181,7 +182,7 @@ public class GrafikaMedyczna extends JFrame {
           BufferedImage colorImage1 = new BufferedImage(read.getWidth(), read.getHeight(), BufferedImage.TYPE_INT_RGB);
           colorImage1.getGraphics().drawImage(read, 0, 0, null);
           int[] bitMap = ImageHelper.getBitMap(colorImage1);
-          int[] ints = OpenCvUtil.doHilditchsThinning(bitMap, colorImage1.getWidth(), colorImage1.getHeight());
+          int[] ints = HilditchsThinner.performHilditchsThinning(bitMap, colorImage1.getWidth(), colorImage1.getHeight());
           ImageHelper.rewrite(colorImage1, ints);
           imageLabel.setIcon(new ImageIcon(colorImage1));
         }

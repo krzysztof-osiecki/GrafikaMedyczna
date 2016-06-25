@@ -11,7 +11,8 @@ import org.opencv.imgproc.Imgproc;
 import java.awt.image.BufferedImage;
 
 public class CannyEdgeDetector {
-  public static BufferedImage performCannyDetection(BufferedImage read, Double sigma, Integer low, Integer high) {
+  public static BufferedImage performCannyDetection(BufferedImage read, Double sigma, Integer low, Integer high, int[][] magnitude,
+			Direction[][] direction) {
     Mat mat = OpenCvUtil.bufferedImageToMat(read);
     Mat grayMat = new Mat(mat.rows(), mat.cols(), CvType.CV_8UC1);
     Imgproc.cvtColor(mat, grayMat, Imgproc.COLOR_RGB2GRAY);
@@ -22,8 +23,6 @@ public class CannyEdgeDetector {
     Imgproc.Sobel(grayMat, dy, -1, 0, 1, 3, 1, 0);
     int[][] xAsIntArray = ValueConverter.getIntArray(dx);
     int[][] yAsIntArray = ValueConverter.getIntArray(dy);
-    int[][] magnitude = new int[grayMat.rows()][grayMat.cols()];
-    Direction[][] direction = new Direction[grayMat.rows()][grayMat.cols()];
     calulateMagnitudeAndDirection(grayMat, xAsIntArray, yAsIntArray, magnitude, direction);
     Mat result = new Mat(grayMat.rows(), grayMat.cols(), CvType.CV_8UC1);
     result.put(0, 0, ValueConverter.toByteArray(ValueConverter.make1D(magnitude, grayMat.rows(), grayMat.cols())));

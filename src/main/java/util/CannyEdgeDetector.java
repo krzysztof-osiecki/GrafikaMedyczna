@@ -3,6 +3,7 @@ package util;
 import data.ThresholdType;
 import javaslang.Tuple;
 import javaslang.Tuple2;
+import org.opencv.core.Core;
 import org.opencv.core.CvType;
 import org.opencv.core.Mat;
 import org.opencv.core.Size;
@@ -11,19 +12,17 @@ import org.opencv.imgproc.Imgproc;
 import java.awt.image.BufferedImage;
 
 public class CannyEdgeDetector {
-  public static BufferedImage performCannyDetection(BufferedImage read, Double sigma, Integer low, Integer high, int[][] magnitude,
-			Direction[][] direction) {
+  public static BufferedImage performCannyDetection(BufferedImage read, Double sigma, Integer low, Integer high) {
     Mat mat = OpenCvUtil.bufferedImageToMat(read);
     Mat grayMat = new Mat(mat.rows(), mat.cols(), CvType.CV_8UC1);
-    Imgproc.cvtColor(mat, grayMat, Imgproc.COLOR_RGB2GRAY);
-    Imgproc.GaussianBlur(grayMat, grayMat, new Size(), sigma);
-    Mat dx = new Mat();
-    Mat dy = new Mat();
-    Imgproc.Sobel(grayMat, dx, -1, 1, 0, 3, 1, 0);
-    Imgproc.Sobel(grayMat, dy, -1, 0, 1, 3, 1, 0);
-    int[][] xAsIntArray = ValueConverter.getIntArray(dx);
-    int[][] yAsIntArray = ValueConverter.getIntArray(dy);
-    calulateMagnitudeAndDirection(grayMat, xAsIntArray, yAsIntArray, magnitude, direction);
+    Imgproc.GaussianBlur(mat, mat, new Size(), sigma);
+    Imgproc.cvtColor(mat, grayMat, Imgproc.COLOR_BGR2GRAY);
+    Mat dx = new Mat(grayMat.rows(), grayMat.cols(), grayMat.type());
+    Mat dy = new Mat(grayMat.rows(), grayMat.cols(), grayMat.type());
+    Imgproc.Sobel(grayMat, dx, CvType.CV_32F, 1, 0, 3, 1, 0, Imgproc.BORDER_DEFAULT);
+    Imgproc.Sobel(grayMat, dy, CvType.CV_32F, 0, 1, 3, 1, 0, Imgproc.BORDER_DEFAULT);
+    Direction[][] direction = new Direction[grayMat.rows()][grayMat.cols()];
+    int[][] magnitude = calulateMagnitudeAndDirection(grayMat, dx, dy, direction);
     Mat result = new Mat(grayMat.rows(), grayMat.cols(), CvType.CV_8UC1);
     result.put(0, 0, ValueConverter.toByteArray(ValueConverter.make1D(magnitude, grayMat.rows(), grayMat.cols())));
     result = OpenCvUtil.threshold(result, -1, 255, ThresholdType.OTSU_2D, ThresholdType.THRESH_TOZERO);
@@ -94,17 +93,26 @@ public class CannyEdgeDetector {
     }
   }
 
-  private static void calulateMagnitudeAndDirection(Mat grayMat, int[][] xAsIntArray, int[][] yAsIntArray,
-                                                    int[][] magnitude,
-                                                    Direction[][] direction) {
+  private static int[][] calulateMagnitudeAndDirection(Mat grayMat, Mat dx, Mat dy,
+                                                       Direction[][] direction) {
+    Mat mag = new Mat(grayMat.rows(), grayMat.cols(), grayMat.type());
+    Mat dxAbs = new Mat(grayMat.rows(), grayMat.cols(), grayMat.type());
+    Mat dyAbs = new Mat(grayMat.rows(), grayMat.cols(), grayMat.type());
+    Core.magnitude(dx, dy, mag);
+    Core.convertScaleAbs(dx, dxAbs);
+    Core.convertScaleAbs(dy, dyAbs);
+    Core.convertScaleAbs(mag, mag);
+
+    int[][] xAsIntArray = ValueConverter.getIntArray(dxAbs);
+    int[][] yAsIntArray = ValueConverter.getIntArray(dyAbs);
+    int[][] magnitude = ValueConverter.getIntArray(mag);
     for (int x = 0; x < grayMat.rows(); x++) {
       for (int y = 0; y < grayMat.cols(); y++) {
-        int hypot = (int) Math.hypot(xAsIntArray[x][y], yAsIntArray[x][y]);
         double v = Math.toDegrees(Math.atan2(yAsIntArray[x][y], xAsIntArray[x][y]));
-        magnitude[x][y] = hypot;
         direction[x][y] = Direction.of(v);
       }
     }
+    return magnitude;
   }
 
 }

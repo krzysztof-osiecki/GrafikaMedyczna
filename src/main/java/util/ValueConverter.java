@@ -1,20 +1,35 @@
 package util;
 
+import org.opencv.core.CvType;
 import org.opencv.core.Mat;
 
 public class ValueConverter {
   public static int[][] getIntArray(Mat mat) {
-    byte[] dyP = new byte[mat.rows() * mat.cols()];
-    mat.get(0, 0, dyP);
-    int i = 0;
-    int[][] ints = new int[mat.rows()][mat.cols()];
-    for (int x = 0; x < mat.rows(); x++) {
-      for (int y = 0; y < mat.cols(); y++) {
-        ints[x][y] = dyP[i] & 0xff;
-        i++;
+    if (mat.type() == CvType.CV_32F) {
+      float[] dyP = new float[mat.rows() * mat.cols()];
+      mat.get(0, 0, dyP);
+      int i = 0;
+      int[][] ints = new int[mat.rows()][mat.cols()];
+      for (int x = 0; x < mat.rows(); x++) {
+        for (int y = 0; y < mat.cols(); y++) {
+          ints[x][y] = (int)dyP[i];
+          i++;
+        }
       }
+      return ints;
+    } else {
+      byte[] dyP = new byte[mat.rows() * mat.cols()];
+      mat.get(0, 0, dyP);
+      int i = 0;
+      int[][] ints = new int[mat.rows()][mat.cols()];
+      for (int x = 0; x < mat.rows(); x++) {
+        for (int y = 0; y < mat.cols(); y++) {
+          ints[x][y] = dyP[i] & 0xff;
+          i++;
+        }
+      }
+      return ints;
     }
-    return ints;
   }
 
   public static double[] make1D(double[][] array, int width, int height) {

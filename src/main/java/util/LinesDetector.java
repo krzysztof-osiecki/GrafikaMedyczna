@@ -6,8 +6,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class LinesDetector {
-	private static final int THETA_COUNT = 180;
-	private static final double THRESHOLD = 750;
+	private static final int THETA_COUNT = 90;
+	private static final double THRESHOLD = 650;
 	private static double[] sinCache;
 	private static double[] cosCache;
 
@@ -16,8 +16,8 @@ public class LinesDetector {
 		cosCache = sinCache.clone();
 		for (int t = 0; t < THETA_COUNT; t++) {
 			double realTheta = t * 180 / THETA_COUNT;
-			sinCache[t] = Math.sin(realTheta);
-			cosCache[t] = Math.cos(realTheta);
+			sinCache[t] = Math.sin(Math.toRadians(realTheta));
+			cosCache[t] = Math.cos(Math.toRadians(realTheta));
 		}
 	}
 
@@ -30,7 +30,7 @@ public class LinesDetector {
 
 		for (int x = 0; x < magnitude.length; x++) {
 			for (int y = 0; y < magnitude[x].length; y++) {
-				if ((magnitude[x][y] & 0x000000ff) != 0) {
+				if (magnitude[x][y] > 0) {
 					for (int t = 0; t < THETA_COUNT; t++) {
 						int r = (int) ((x * cosCache[t]) + (y * sinCache[t]));
 						if (r < 0 || r >= houghHeight) {
@@ -41,7 +41,7 @@ public class LinesDetector {
 				}
 			}
 		}
-		suppressNonMaxPixels(houghArray, 5);
+		suppressNonMaxPixels(houghArray, 15);
 
 		List<HoughLine> lines = new ArrayList<>();
 		for (int t = 0; t < THETA_COUNT; t++) {
@@ -50,12 +50,12 @@ public class LinesDetector {
 					double theta = t * THETA_COUNT / 180;
 					HoughLine e = new HoughLine(theta, r);
 					lines.add(e);
-					e.draw(bufferedImage, Color.RED.getRGB());
+					e.draw(image, Color.RED.getRGB());
 				}
 			}
 		}
 
-		return bufferedImage;
+		return image;
 	}
 
 	private static void suppressNonMaxPixels(int[][] mag, int neighbour) {

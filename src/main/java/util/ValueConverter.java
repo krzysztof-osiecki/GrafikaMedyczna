@@ -12,7 +12,7 @@ public class ValueConverter {
       int[][] ints = new int[mat.rows()][mat.cols()];
       for (int x = 0; x < mat.rows(); x++) {
         for (int y = 0; y < mat.cols(); y++) {
-          ints[x][y] = (int)dyP[i];
+          ints[x][y] = (int) dyP[i];
           i++;
         }
       }
@@ -30,18 +30,6 @@ public class ValueConverter {
       }
       return ints;
     }
-  }
-
-  public static double[] make1D(double[][] array, int width, int height) {
-    double[] ints = new double[width * height];
-    int i = 0;
-    for (double[] outerArray : array) {
-      for (double value : outerArray) {
-        ints[i] = value;
-        i++;
-      }
-    }
-    return ints;
   }
 
   public static int[] make1D(int[][] array, int width, int height) {

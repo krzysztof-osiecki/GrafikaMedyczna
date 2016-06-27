@@ -37,30 +37,24 @@ public class CannyEdgeDetector {
 
   private static int[] performHysteresis(int[] mag, int low, int high, int height, int width) {
     int[] data = new int[height * width];
-    int offset = 0;
+    int i = 0;
     for (int y = 0; y < height; y++) {
       for (int x = 0; x < width; x++) {
-        if (data[offset] == 0 && mag[offset] >= high) {
-          follow(data, mag, x, y, offset, low, width, height);
+        if (data[i] == 0 && mag[i] >= high) {
+          follow(data, mag, x, y, i, low, width, height);
         }
-        offset++;
+        i++;
       }
     }
     return data;
   }
 
-  private static void follow(int[] data, int[] mag, int x1, int y1, int i1, int threshold, int width, int height) {
-    int x0 = x1 == 0 ? x1 : x1 - 1;
-    int x2 = x1 == width - 1 ? x1 : x1 + 1;
-    int y0 = y1 == 0 ? y1 : y1 - 1;
-    int y2 = y1 == height - 1 ? y1 : y1 + 1;
-    data[i1] = mag[i1];
-    for (int x = x0; x <= x2; x++) {
-      for (int y = y0; y <= y2; y++) {
+  private static void follow(int[] data, int[] mag, int x1, int y1, int i, int threshold, int width, int height) {
+    data[i] = mag[i];
+    for (int x = (x1 - 1 < 0 ? x1 : x1 - 1); x <= (x1 + 1 == width ? x1 : x1 + 1); x++) {
+      for (int y = (y1 - 1 < 0 ? y1 : y1 - 1); y <= (y1 + 1 == height ? y1 : y1 + 1); y++) {
         int i2 = x + y * width;
-        if ((y != y1 || x != x1)
-            && data[i2] == 0
-            && mag[i2] >= threshold) {
+        if ((y != y1 || x != x1) && data[i2] == 0 && mag[i2] >= threshold) {
           follow(data, mag, x, y, i2, threshold, width, height);
           return;
         }

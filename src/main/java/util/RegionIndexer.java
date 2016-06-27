@@ -76,7 +76,7 @@ public class RegionIndexer {
       for (int aData2 : data2) {
         if (aData2 != 0) {
           Color color = colors.get(aData2);
-          bytes[index] = (byte) (color.getRed());
+          bytes[index] = (byte) color.getRed();
           bytes[index + 1] = (byte) color.getGreen();
           bytes[index + 2] = (byte) color.getBlue();
         } else {

@@ -127,9 +127,9 @@ public class OpenCvUtil {
     return ImageHelper.substract(substract, colorImage1, 1);
   }
 
-  public static Mat bufferedImageToMat(BufferedImage read) {
+  public static Mat bufferedImageToMat(BufferedImage read, int type) {
     byte[] pixels = ((DataBufferByte) read.getRaster().getDataBuffer()).getData();
-    Mat mat = new Mat(read.getHeight(), read.getWidth(), CvType.CV_8UC3);
+    Mat mat = new Mat(read.getHeight(), read.getWidth(), type);
     mat.put(0, 0, pixels);
     return mat;
   }

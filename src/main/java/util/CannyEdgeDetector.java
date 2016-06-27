@@ -13,7 +13,7 @@ import java.awt.image.BufferedImage;
 
 public class CannyEdgeDetector {
   public static BufferedImage performCannyDetection(BufferedImage read, Double sigma, Integer low, Integer high) {
-    Mat mat = OpenCvUtil.bufferedImageToMat(read);
+    Mat mat = OpenCvUtil.bufferedImageToMat(read, CvType.CV_8UC3);
     Mat grayMat = new Mat(mat.rows(), mat.cols(), CvType.CV_8UC1);
     Imgproc.GaussianBlur(mat, mat, new Size(), sigma);
     Imgproc.cvtColor(mat, grayMat, Imgproc.COLOR_BGR2GRAY);

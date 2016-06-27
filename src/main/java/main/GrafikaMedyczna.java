@@ -3,6 +3,7 @@ package main;
 import data.ThresholdType;
 import net.miginfocom.swing.MigLayout;
 import org.opencv.core.Core;
+import org.opencv.core.CvType;
 import org.opencv.core.Mat;
 import org.opencv.highgui.Highgui;
 import org.opencv.imgproc.Imgproc;
@@ -31,6 +32,36 @@ public class GrafikaMedyczna extends JFrame {
 
   public static void main(String[] args) throws Exception {
     new GrafikaMedyczna();
+  }
+
+  private ActionListener openCannyEdgesSuperpositionFileListener() {
+    return ae -> {
+      try {
+        JFileChooser fc = new JFileChooser();
+        int returnVal = fc.showOpenDialog(null);
+        if (returnVal == JFileChooser.APPROVE_OPTION) {
+          file = fc.getSelectedFile();
+          String sigma = (String) JOptionPane.showInputDialog(this, "Choose sigma", "",
+              JOptionPane.PLAIN_MESSAGE, null, null, "");
+          String low = (String) JOptionPane.showInputDialog(this, "Choose low hysteresis level", "",
+              JOptionPane.PLAIN_MESSAGE, null, null, "");
+          String high = (String) JOptionPane.showInputDialog(this, "Choose high hysteresis level", "",
+              JOptionPane.PLAIN_MESSAGE, null, null, "");
+          BufferedImage read = ImageIO.read(file);
+          Mat imread = Highgui.imread(file.getAbsolutePath());
+          BufferedImage bufferedImage =
+              CannyEdgeDetector.performCannyDetection(read, Double.valueOf(sigma), Integer.valueOf(low),
+                  Integer.valueOf(high));
+          Mat edges = OpenCvUtil.bufferedImageToMat(bufferedImage, CvType.CV_8UC1);
+          Imgproc.cvtColor(edges, edges, Imgproc.COLOR_GRAY2RGB);
+          Core.add(imread, edges, imread);
+          imageLabel.setIcon(new ImageIcon(OpenCvUtil.byteMat2RgbBufferedImage(imread)));
+        }
+        repaint();
+      } catch (Exception e) {
+        e.printStackTrace();
+      }
+    };
   }
 
   private ActionListener openCannyEdgesFileListener() {
@@ -237,6 +268,7 @@ public class GrafikaMedyczna extends JFrame {
     menuItem(menu, "Skeletonization", openSkeletonizationFileListener());
     menuItem(menu, "Index regions", openRegionIndexingFileListener());
     menuItem(menu, "Find edges", openCannyEdgesFileListener());
+    menuItem(menu, "Find edges with superposition", openCannyEdgesSuperpositionFileListener());
     menuItem(menu, "Find Hough Lines", openHoughLinesFileListener());
     menu.addSeparator();
     //item wyjscia z aplikacji
